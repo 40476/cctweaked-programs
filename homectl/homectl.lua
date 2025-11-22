@@ -25,17 +25,22 @@ local function saveConfig()
 end
 
 local function generateClient()
+    local tmpClientFile = "client_gen.lua"
+
     -- Always download the latest config_gen.lua and client_base.lua
-    shell.run("wget -f https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/config_gen.lua config_gen.lua")
-    shell.run("wget -f https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/client_base.lua client_base.lua")
+    shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/config_gen.lua config_gen.lua")
+    shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/client_base.lua client_base.lua")
 
     -- Run config_gen.lua to prompt user for settings
     shell.run("config_gen.lua")
 
-    -- After config_gen.lua runs, it should have written a file called client_gen.lua
-    -- Now upload that file to Pastebin
+    -- Upload to Pastebin and capture the returned ID
     print("Uploading client to Pastebin...")
-    shell.run("pastebin put " .. tmpClientFile)
+    local handle = shell.run("pastebin put " .. tmpClientFile)
+    local output = handle:read("*a")
+    handle:close()
+    print("make note of this and press enter")
+    read()
 
     -- Ask to add to controller config
     write("Add this device to controller config? (y/n): ")
@@ -43,15 +48,15 @@ local function generateClient()
     if ans == "y" then
         write("Enter a name for this device: ")
         local name = read()
-        -- config_gen.lua should have stored the chosen channel in a temp file
         local f = fs.open("last_channel.txt", "r")
         local channel = tonumber(f.readAll())
         f.close()
-        table.insert(devices, { channel = channel, name = name, status = "[?]" })
+        table.insert(devices, { channel = channel, name = name, status = "[?]", pastebin = pasteID })
         saveConfig()
         print("Device added to controller config.")
     end
 end
+
 
 -- Open modem
 local modem = peripheral.find("modem") or error("No modem found!")
