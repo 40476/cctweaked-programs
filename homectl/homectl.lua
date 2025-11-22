@@ -1,5 +1,6 @@
 local configFile = "devices.cfg"
 local winWidth, winHeight = term.getSize()
+local tmpClientFile = "client_gen.lua"
 
 -- Load devices from file or start with defaults
 local devices = {}
@@ -102,16 +103,20 @@ local function editConfig()
     end
     print("a=add, r=remove, m=move, q=quit")
     local choice = read()
-    if choice == "q" then break
-    if choice == "a" then
+    if choice == "q" then
+      break
+    elseif choice == "a" then
       generateClient()
     elseif choice == "r" then
-      write("Index to remove: ") local idx = tonumber(read())
+      write("Index to remove: ")
+      local idx = tonumber(read())
       if devices[idx] then table.remove(devices, idx) end
     elseif choice == "m" then
-      write("Index to move: ") local idx = tonumber(read())
-      write("New position: ") local pos = tonumber(read())
-      if devices[idx] and pos >=1 and pos <= #devices then
+      write("Index to move: ")
+      local idx = tonumber(read())
+      write("New position: ")
+      local pos = tonumber(read())
+      if devices[idx] and pos >= 1 and pos <= #devices then
         local dev = table.remove(devices, idx)
         table.insert(devices, pos, dev)
       end
@@ -119,7 +124,7 @@ local function editConfig()
     saveConfig()
   end
 end
-end
+
 -- UI loop
 local currentIndex, cursor = 1, 1
 local function mainUI()
