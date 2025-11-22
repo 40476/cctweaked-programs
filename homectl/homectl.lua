@@ -36,9 +36,7 @@ local function generateClient()
 
     -- Upload to Pastebin and capture the returned ID
     print("Uploading client to Pastebin...")
-    local handle = shell.run("pastebin put " .. tmpClientFile)
-    local output = handle:read("*a")
-    handle:close()
+    shell.run("pastebin put " .. tmpClientFile)
     print("make note of this and press enter")
     read()
 
