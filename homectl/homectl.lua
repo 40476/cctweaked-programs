@@ -12,8 +12,7 @@ if fs.exists(configFile) then
 end
 if #devices == 0 then
   devices = {
-    { channel = 1, name = "1st floor lights", status = "[?]" },
-    { channel = 2, name = "2nd floor lights", status = "[?]" },
+    { channel = 1, name = "DEMO", status = "[?]" },
   }
 end
 
@@ -26,7 +25,7 @@ end
 
 local function generateClient()
     local tmpClientFile = "client_gen.lua"
-
+    
     -- Always download the latest config_gen.lua and client_base.lua
     shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/config_gen.lua config_gen.lua")
     shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/client_base.lua client_base.lua")
@@ -49,10 +48,13 @@ local function generateClient()
         local f = fs.open("last_channel.txt", "r")
         local channel = tonumber(f.readAll())
         f.close()
-        table.insert(devices, { channel = channel, name = name, status = "[?]", pastebin = pasteID })
+        table.insert(devices, { channel = channel, name = name, status = "[?]"})
         saveConfig()
         print("Device added to controller config.")
     end
+    shell.run("rm config_gen.lua")
+    shell.run("rm client_base.lua")
+    shell.run("rm config_gen.lua")
 end
 
 
@@ -131,7 +133,7 @@ end
 -- UI loop
 local currentIndex, cursor = 1, 1
 local function mainUI()
-  requestStatus()
+  -- requestStatus()
   while true do
     term.clear()
     term.setCursorPos(1,1)
@@ -150,6 +152,7 @@ local function mainUI()
       if dev then
         local cmd = (dev.status=="[ON]") and "off" or "on"
         modem.transmit(dev.channel, dev.channel, cmd)
+        os.sleep(0.5)
         requestStatus()
       end
     elseif key == keys.c then
