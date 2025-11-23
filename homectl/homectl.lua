@@ -152,7 +152,6 @@ local function mainUI()
       if dev then
         local cmd = (dev.status=="[ON]") and "off" or "on"
         modem.transmit(dev.channel, dev.channel, cmd)
-        os.sleep(0.5)
         requestStatus()
       end
     elseif key == keys.c then
