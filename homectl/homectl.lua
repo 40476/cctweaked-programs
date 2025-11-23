@@ -133,7 +133,7 @@ end
 -- UI loop
 local currentIndex, cursor = 1, 1
 local function mainUI()
-  -- requestStatus()
+  requestStatus()
   while true do
     term.clear()
     term.setCursorPos(1,1)
@@ -146,29 +146,39 @@ local function mainUI()
         term.setCursorPos(1,i+2)
       end
     end
-    local event, key = os.pullEvent("key")
-    if key == keys.enter then
-      local dev = devices[currentIndex+cursor-1]
-      if dev then
-        local cmd = (dev.status=="[ON]") and "off" or "on"
-        modem.transmit(dev.channel, dev.channel, cmd)
+
+    local event, p1 = os.pullEvent()
+    if event == "key" then
+      local key = p1
+      if key == keys.enter then
+        local dev = devices[currentIndex+cursor-1]
+        if dev then
+          local cmd = (dev.status=="[ON]") and "off" or "on"
+          modem.transmit(dev.channel, dev.channel, cmd)
+          os.sleep(0.5)
+          requestStatus()
+        end
+      elseif key == keys.c then
+        editConfig()
         requestStatus()
+      elseif key == keys.r then
+        requestStatus()
+      elseif key == keys.q then
+        break
+      elseif key == keys.up then
+        if cursor>1 then cursor=cursor-1 elseif currentIndex>1 then currentIndex=currentIndex-1 end
+      elseif key == keys.down then
+        if cursor<winHeight-1 and cursor<#devices-currentIndex+1 then cursor=cursor+1
+        elseif currentIndex+winHeight-1<#devices then currentIndex=currentIndex+1 end
       end
-    elseif key == keys.c then
-      editConfig()
-      requestStatus()
-    elseif key == keys.r then
-      requestStatus()
-    elseif key == keys.q then
-      break
-    elseif key == keys.up then
-      if cursor>1 then cursor=cursor-1 elseif currentIndex>1 then currentIndex=currentIndex-1 end
-    elseif key == keys.down then
-      if cursor<winHeight-1 and cursor<#devices-currentIndex+1 then cursor=cursor+1
-      elseif currentIndex+winHeight-1<#devices then currentIndex=currentIndex+1 end
+    elseif event == "modem_message" then
+      -- just redraw, statuses already updated by handleEvents
+    elseif event == "timer" then
+      -- could trigger periodic refresh
     end
   end
 end
+
 
 -- Run event handler in parallel with UI
 parallel.waitForAny(handleEvents, mainUI)
