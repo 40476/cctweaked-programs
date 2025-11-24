@@ -36,7 +36,7 @@ f.close()
 -- If monitor requested, download door.lua and append
 local monitorCode = ""
 if monitorName then
-  shell.run("wget -f https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/door.lua door.lua")
+  shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/door.lua door.lua")
   local f2 = fs.open("door.lua", "r")
   monitorCode = f2.readAll()
   f2.close()
