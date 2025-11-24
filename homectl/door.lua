@@ -88,10 +88,10 @@ if monitorName then
 
   -- Hook into state changes
   function monitor_refresh(command)
-      addLog(command)
-      updateMonitor(command)
-    end
+    addLog(command)
+    updateMonitor(command)
   end
+  
 
   -- Initial display
   addLog(false)
