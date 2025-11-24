@@ -33,83 +33,14 @@ local f = fs.open("client_base.lua", "r")
 local clientBase = f.readAll()
 f.close()
 
--- If monitor requested, append monitor code
+-- If monitor requested, download door.lua and append
 local monitorCode = ""
 if monitorName then
-  monitorCode = [[
-
--- Optional monitor display
-local monitor = peripheral.wrap(monitorName)
-monitor.setTextScale(0.5)
-monitor.clear()
-
-local ascii_locked = {
-  '    .-""-. ',
-  '   / .--. \\ ',
-  '  / /    \\ \\ ',
-  '  | |    | | ',
-  '  | |.-""-.| ',
-  ' ///`.::::.`\\ ',
-  '||| ::/  \\:: ; ',
-  '||; ::\\__/:: ; ',
-  ' \\\\\\ ::::: / ',
-  '  `=::-..-:` ',
-}
-
-local ascii_unlocked = {
-  '    .-""-. ',
-  '   / .--. \\ ',
-  '  / /        ',
-  '  | |        ',
-  '  | |.-""-.  ',
-  ' ///`.::::.`\\ ',
-  '||| ::/  \\:: ; ',
-  '||; ::\\__/:: ; ',
-  ' \\\\\\ ::::: / ',
-  '  `=::-..-:` ',
-}
-
-local logFile = "door_log.txt"
-local log = {}
-
-local function saveLog()
-  local _, monHeight = monitor.getSize()
-  local artHeight = #ascii_locked
-  local availableLines = monHeight - artHeight
-  while #log > availableLines do table.remove(log,1) end
-  local f = fs.open(logFile,"w")
-  for _,entry in ipairs(log) do f.writeLine(entry) end
-  f.close()
-end
-
-local function updateMonitor(isLocked)
-  monitor.clear()
-  monitor.setCursorPos(1,1)
-  local art = isLocked and ascii_locked or ascii_unlocked
-  for _,line in ipairs(art) do
-    monitor.write(line)
-    local x,y = monitor.getCursorPos()
-    monitor.setCursorPos(1,y+1)
-  end
-  local _, monHeight = monitor.getSize()
-  local artHeight = #art
-  local availableLines = monHeight - artHeight
-  local startIndex = math.max(1,#log-availableLines+1)
-  local y = artHeight+1
-  for i=startIndex,#log do
-    monitor.setCursorPos(1,y)
-    monitor.write(log[i])
-    y=y+1
-  end
-end
-
-local function addLog(isLocked)
-  local ts = os.epoch and math.ceil(os.epoch("utc")/1000) or os.time()
-  local prefix = isLocked and "LO " or "UN "
-  table.insert(log,prefix..ts)
-  saveLog()
-end
-]]
+  shell.run("wget -f https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/door.lua door.lua")
+  local f2 = fs.open("door.lua", "r")
+  monitorCode = f2.readAll()
+  f2.close()
+  shell.run("rm door.lua")
 end
 
 -- Write combined client
@@ -118,8 +49,8 @@ out.write(configBlock .. "\n" .. clientBase .. "\n" .. monitorCode)
 out.close()
 
 -- Save channel for controller integration
-local f2 = fs.open("last_channel.txt", "w")
-f2.write(tostring(channel))
-f2.close()
+local f3 = fs.open("last_channel.txt", "w")
+f3.write(tostring(channel))
+f3.close()
 
 print("Client generated as client_gen.lua")
