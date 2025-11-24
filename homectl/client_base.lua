@@ -80,6 +80,4 @@ local function handleModemMessages()
     end
 end
 
--- Run input monitoring and message handling in parallel
-print("Listening for signals and monitoring input...")
-parallel.waitForAny(monitorInput, handleModemMessages)
+print("Loading additional inbuilt modules!")

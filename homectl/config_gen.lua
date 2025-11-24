@@ -45,7 +45,7 @@ end
 
 -- Write combined client
 local out = fs.open("client_gen.lua", "w")
-out.write(configBlock .. "\n" .. clientBase .. "\n" .. monitorCode)
+out.write(configBlock .. "\n" .. monitorCode .. "\n" .. clientBase.."\nprint(\"Listening for signals and monitoring input...\")\nparallel.waitForAny(monitorInput, handleModemMessages)")
 out.close()
 
 -- Save channel for controller integration
