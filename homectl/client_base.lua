@@ -76,6 +76,9 @@ local function handleModemMessages()
                 modem.transmit(channel, channel, statusMessage) -- Respond with current status
                 print("Status queried. Sent response: " .. statusMessage)
             end
+            if monitor_refresh then
+                monitor_refresh(redstone.getInput(redstoneSide))
+            end
         end
     end
 end

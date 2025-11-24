@@ -1,6 +1,9 @@
 -- door.lua (monitor integration)
 
+print("Module: door.lua")
+
 if monitorName then
+  print("door.lua | monitor found!")
   local monitor = peripheral.wrap(monitorName)
   monitor.setTextScale(0.5)
   monitor.clear()
@@ -78,21 +81,15 @@ if monitorName then
 
   local function addLog(isOn)
     local ts = os.epoch and math.ceil(os.epoch("utc")/1000) or os.time()
-    local prefix = isOn and "ON " or "OFF "
+    local prefix = isOn and "LO " or "UN "
     table.insert(log,prefix..ts)
     saveLog()
   end
 
   -- Hook into state changes
-  local oldStateChange = stateChange
-  stateChange = function(value, command)
-    oldStateChange(value, command)
-    if command == "on" then
-      addLog(true)
-      updateMonitor(true)
-    elseif command == "off" then
-      addLog(false)
-      updateMonitor(false)
+  function monitor_refresh(command)
+      addLog(command)
+      updateMonitor(command)
     end
   end
 
