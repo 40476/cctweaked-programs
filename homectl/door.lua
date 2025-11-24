@@ -81,7 +81,7 @@ if monitorName then
 
   local function addLog(isOn)
     local ts = os.epoch and math.ceil(os.epoch("utc")/1000) or os.time()
-    local prefix = isOn and "LO " or "UN "
+    local prefix = isOn and "UN " or "LO "
     table.insert(log,prefix..ts)
     saveLog()
   end
