@@ -81,7 +81,7 @@ local function handleEvents()
       local side, ch, reply, msg = p1, p2, p3, p4
       if pending[ch] then
         local dev = pending[ch].dev
-        dev.status = (msg == "ON") and "[ON]" or (msg == "OFF" and "[OFF]" or "[ERR]")
+        dev.status = (msg == "ON") and "[ON ]" or (msg == "OFF" and "[OFF]" or "[ERR]")
         pending[ch] = nil
       end
     elseif event == "timer" then
@@ -153,7 +153,7 @@ local function mainUI()
       if key == keys.enter then
         local dev = devices[currentIndex+cursor-1]
         if dev then
-          local cmd = (dev.status=="[ON]") and "off" or "on"
+          local cmd = (dev.status=="[ON ]") and "off" or "on"
           modem.transmit(dev.channel, dev.channel, cmd)
           os.sleep(0.5)
           requestStatus()
