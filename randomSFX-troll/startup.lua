@@ -51,7 +51,7 @@ if args[1] == "install" then
   for _, fname in ipairs(files) do
     local url = baseURL .. fname
     print("Downloading " .. fname)
-    shell.run("wget -f " .. url .. " " .. fname)
+    shell.run("wget " .. url .. " " .. fname)
   end
   print("All files downloaded.")
 else
