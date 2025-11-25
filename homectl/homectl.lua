@@ -2,7 +2,7 @@ local configFile = "devices.cfg"
 local winWidth, winHeight = term.getSize()
 local tmpClientFile = "client_gen.lua"
 
--- Load devices from file or start with defaults
+-- Load devices
 local devices = {}
 if fs.exists(configFile) then
   local f = fs.open(configFile, "r")
@@ -12,7 +12,7 @@ if fs.exists(configFile) then
 end
 if #devices == 0 then
   devices = {
-    { channel = 1, name = "DEMO", status = "[?]" },
+    { channel = 1, name = "DEMO", status = "[?]", gateway = false },
   }
 end
 
@@ -24,56 +24,71 @@ local function saveConfig()
 end
 
 local function generateClient()
-    local tmpClientFile = "client_gen.lua"
-    
-    -- Always download the latest config_gen.lua and client_base.lua
-    shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/config_gen.lua config_gen.lua")
-    shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/client_base.lua client_base.lua")
+  local tmpClientFile = "client_gen.lua"
 
-    -- Run config_gen.lua to prompt user for settings
-    shell.run("config_gen.lua")
+  shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/config_gen.lua config_gen.lua")
+  shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/client_base.lua client_base.lua")
 
-    -- Upload to Pastebin and capture the returned ID
-    print("Uploading client to Pastebin...")
-    shell.run("pastebin put " .. tmpClientFile)
-    print("make note of this and press enter")
-    read()
+  shell.run("config_gen.lua")
 
-    -- Ask to add to controller config
-    write("Add this device to controller config? (y/n): ")
-    local ans = read()
-    if ans == "y" then
-        write("Enter a name for this device: ")
-        local name = read()
-        local f = fs.open("last_channel.txt", "r")
-        local channel = tonumber(f.readAll())
-        f.close()
-        table.insert(devices, { channel = channel, name = name, status = "[?]"})
-        saveConfig()
-        print("Device added to controller config.")
+  print("Uploading client to Pastebin...")
+  shell.run("pastebin put " .. tmpClientFile)
+  print("make note of this and press enter")
+  read()
+
+  write("Add this device to controller config? (y/n): ")
+  local ans = read()
+  if ans == "y" then
+    write("Enter a name for this device: ")
+    local name = read()
+
+    local gatewayFlag = false
+    if fs.exists("last_gateway.txt") then
+      local fgw = fs.open("last_gateway.txt", "r")
+      gatewayFlag = (fgw.readAll() == "1")
+      fgw.close()
     end
-    shell.run("rm config_gen.lua")
-    shell.run("rm client_base.lua")
-    shell.run("rm config_gen.lua")
-end
 
+    local channel = 0
+    if not gatewayFlag then
+      local f = fs.open("last_channel.txt", "r")
+      channel = tonumber(f.readAll())
+      f.close()
+    else
+      channel = 124 -- fixed gateway server channel
+    end
+
+    table.insert(devices, { channel = channel, name = name, status = "[?]", gateway = gatewayFlag })
+    saveConfig()
+    print("Device added to controller config.")
+  end
+
+  shell.run("rm config_gen.lua")
+  shell.run("rm client_base.lua")
+end
 
 -- Open modem
 local modem = peripheral.find("modem") or error("No modem found!")
 for _, dev in ipairs(devices) do modem.open(dev.channel) end
+
+local password = "superSecret123" -- must match gateway server
 
 -- Async status request
 local pending = {}
 local function requestStatus()
   pending = {}
   for _, dev in ipairs(devices) do
-    modem.transmit(dev.channel, dev.channel, "status")
+    if dev.gateway then
+      modem.transmit(dev.channel, dev.channel, { password = password, cmd = "status" })
+    else
+      modem.transmit(dev.channel, dev.channel, "status")
+    end
     pending[dev.channel] = { dev = dev, timeout = os.clock() + 5 }
     dev.status = "[...]"
   end
 end
 
--- Handle modem responses & timeouts
+-- Handle modem responses
 local function handleEvents()
   while true do
     local event, p1, p2, p3, p4 = os.pullEvent()
@@ -81,13 +96,15 @@ local function handleEvents()
       local side, ch, reply, msg = p1, p2, p3, p4
       if pending[ch] then
         local dev = pending[ch].dev
-        dev.status = (msg == "ON") and "[ON ]" or (msg == "OFF" and "[OFF]" or "[ERR]")
+        if type(msg) == "string" then
+          dev.status = (msg == "ON") and "[ON ]" or (msg == "OFF" and "[OFF]" or "[ERR]")
+        else
+          dev.status = "[ERR]"
+        end
         pending[ch] = nil
       end
-    elseif event == "timer" then
-      -- not used here, we check timeouts manually
     end
-    -- check timeouts
+    -- timeouts
     local now = os.clock()
     for ch, info in pairs(pending) do
       if now > info.timeout then
@@ -98,13 +115,14 @@ local function handleEvents()
   end
 end
 
--- Config editor: add/remove/reorder
+-- Config editor
 local function editConfig()
   while true do
     term.clear()
     print("=== Config Editor ===")
     for i, dev in ipairs(devices) do
-      print(i .. ". " .. dev.name .. " (Channel " .. dev.channel .. ")")
+      local tag = dev.gateway and " [GW]" or ""
+      print(i .. ". " .. dev.name .. " (Channel " .. dev.channel .. ")" .. tag)
     end
     print("a=add, r=remove, m=move, q=quit")
     local choice = read()
@@ -141,7 +159,8 @@ local function mainUI()
       local idx = currentIndex+i
       if idx <= #devices then
         local dev = devices[idx]
-        local line = dev.status.." "..dev.name
+        local tag = dev.gateway and " [GW]" or ""
+        local line = dev.status.." "..dev.name..tag
         if cursor == i+1 then write("-> "..line) else write(line) end
         term.setCursorPos(1,i+2)
       end
@@ -154,7 +173,11 @@ local function mainUI()
         local dev = devices[currentIndex+cursor-1]
         if dev then
           local cmd = (dev.status=="[ON ]") and "off" or "on"
-          modem.transmit(dev.channel, dev.channel, cmd)
+          if dev.gateway then
+            modem.transmit(dev.channel, dev.channel, { password = password, cmd = cmd })
+          else
+            modem.transmit(dev.channel, dev.channel, cmd)
+          end
           os.sleep(0.5)
           requestStatus()
         end
@@ -171,14 +194,8 @@ local function mainUI()
         if cursor<winHeight-1 and cursor<#devices-currentIndex+1 then cursor=cursor+1
         elseif currentIndex+winHeight-1<#devices then currentIndex=currentIndex+1 end
       end
-    elseif event == "modem_message" then
-      -- just redraw, statuses already updated by handleEvents
-    elseif event == "timer" then
-      -- could trigger periodic refresh
     end
   end
 end
 
-
--- Run event handler in parallel with UI
 parallel.waitForAny(handleEvents, mainUI)
