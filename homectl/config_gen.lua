@@ -1,77 +1,88 @@
 -- homectl/config_gen.lua
 
-write("Use gateway mode? (y/n): ")
-local useGateway = (read() == "y")
+write("Generate gateway server? (y/n): ")
+local makeGatewayServer = (read() == "y")
 
-local modemSide, channel, redstoneSide, inputSide
-if useGateway then
-  -- Gateway mode: wired only, no wireless modem
-  write("Wired modem side: ") local wiredSide = read()
-  write("Redstone output side: ") redstoneSide = read()
-  write("Redstone input side: ") inputSide = read()
-  channel = 124 -- fixed channel for gateway
-  modemSide = nil
+if makeGatewayServer then
+  -- Prompt for gateway server settings
+  write("Listen channel: ") local listenChannel = tonumber(read())
+  write("Password: ") local password = read()
+  write("Wireless modem side: ") local wirelessModemSide = read()
+  write("Wired modem side: ") local wiredModemSide = read()
+
+  -- Build config block
+  local configBlock = string.format([[
+-- Gateway Server Configuration
+local listenChannel = %d
+local password = "%s"
+local wirelessModemSide = "%s"
+local wiredModemSide = "%s"
+]], listenChannel, password, wirelessModemSide, wiredModemSide)
+
+  -- Gateway server base code
+  shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/gateway_server_base.lua gateway_server_base.lua")
+  local f2 = fs.open("gateway_server_base.lua", "r")
+  serverBase = f2.readAll()
+  f2.close()
+  shell.run("rm gateway_server_base.lua")
+
+
+  -- Write gateway_server.lua
+  local out = fs.open("gateway_server.lua", "w")
+  out.write(configBlock .. "\n" .. serverBase)
+  out.close()
+
+  print("Gateway server generated as gateway_server.lua")
 else
-  write("Modem side: ") modemSide = read()
-  write("Redstone output side: ") redstoneSide = read()
-  write("Redstone input side: ") inputSide = read()
-  write("Channel number: ") channel = tonumber(read())
-end
+  -- Normal client generation path (your existing code)
+  write("Modem side: ") local modemSide = read()
+  write("Redstone output side: ") local redstoneSide = read()
+  write("Redstone input side: ") local inputSide = read()
+  write("Channel number: ") local channel = tonumber(read())
+  write("Default value (on/off/none): ") local defaultValue = read()
+  write("Mode (1=normal,2=pulse,3=invert): ") local mode = tonumber(read())
 
-write("Default value (on/off/none): ") local defaultValue = read()
-write("Mode (1=normal,2=pulse,3=invert): ") local mode = tonumber(read())
+  -- Ask about monitor
+  write("Use monitor display? (y/n): ") local useMonitor = read()
+  local monitorName = nil
+  if useMonitor == "y" then
+    write("Enter monitor peripheral name (e.g. monitor_6): ")
+    monitorName = read()
+  end
 
--- Ask about monitor
-write("Use monitor display? (y/n): ") local useMonitor = read()
-local monitorName = nil
-if useMonitor == "y" then
-  write("Enter monitor peripheral name (e.g. monitor_6): ")
-  monitorName = read()
-end
-
--- Build config block
-local configBlock = string.format([[
+  local configBlock = string.format([[
 -- Configuration
-local useGateway = %s
-local modemSide = %s
-local wiredSide = %s
+local modemSide = "%s"
 local redstoneSide = "%s"
 local inputSide = "%s"
 local channel = %d
 local defaultValue = '%s'
 local mode = %d
 local monitorName = %s
-]], tostring(useGateway),
-   modemSide and string.format('"%s"', modemSide) or "nil",
-   useGateway and string.format('"%s"', wiredSide) or "nil",
-   redstoneSide, inputSide, channel, defaultValue, mode,
-   monitorName and string.format('"%s"', monitorName) or "nil")
+]], modemSide, redstoneSide, inputSide, channel, defaultValue, mode,
+     monitorName and string.format('"%s"', monitorName) or "nil")
 
--- Read client_base.lua
-local f = fs.open("client_base.lua", "r")
-local clientBase = f.readAll()
-f.close()
+  local f = fs.open("client_base.lua", "r")
+  local clientBase = f.readAll()
+  f.close()
 
--- If monitor requested, download door.lua and append
-local monitorCode = ""
-if monitorName then
-  shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/door.lua door.lua")
-  local f2 = fs.open("door.lua", "r")
-  monitorCode = f2.readAll()
-  f2.close()
-  shell.run("rm door.lua")
-end
+  local monitorCode = ""
+  if monitorName then
+    shell.run("wget https://raw.githubusercontent.com/40476/cctweaked-programs/main/homectl/door.lua door.lua")
+    local f2 = fs.open("door.lua", "r")
+    monitorCode = f2.readAll()
+    f2.close()
+    shell.run("rm door.lua")
+  end
 
--- Write combined client
-local out = fs.open("client_gen.lua", "w")
-out.write(configBlock .. "\n" .. monitorCode .. "\n" .. clientBase)
-out.close()
+  local out = fs.open("client_gen.lua", "w")
+  out.write(configBlock .. "\n" .. monitorCode .. "\n" .. clientBase ..
+    "\nprint(\"Listening for signals and monitoring input...\")\nparallel.waitForAny(monitorInput, handleModemMessages)")
+  out.close()
 
--- Save channel for controller integration (skip for gateway)
-if not useGateway then
   local f3 = fs.open("last_channel.txt", "w")
   f3.write(tostring(channel))
   f3.close()
-end
 
-print("Client generated as client_gen.lua")
+  print("Client generated as client_gen.lua")
+end
