@@ -1,3 +1,6 @@
+-- wait a few to make sure we arent loading before the chunks are ready or smth
+os.sleep(5)
+
 local modem = peripheral.wrap(modemSide)
 local lock = false
 modem.open(channel)
