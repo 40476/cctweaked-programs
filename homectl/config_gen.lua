@@ -27,12 +27,12 @@ local wiredModemSide = "%s"
   shell.run("rm gateway_server_base.lua")
 
 
-  -- Write gateway_server.lua
-  local out = fs.open("gateway_server.lua", "w")
+  -- Write gateway_server.lua as client_gen.lua
+  local out = fs.open("client_gen.lua", "w")
   out.write(configBlock .. "\n" .. serverBase)
   out.close()
 
-  print("Gateway server generated as gateway_server.lua")
+  print("Gateway server generated as client_gen.lua")
 else
   -- Normal client generation path (your existing code)
   write("Modem side: ") local modemSide = read()
