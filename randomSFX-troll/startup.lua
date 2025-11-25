@@ -41,6 +41,7 @@ local files = {
   "new-vine-boom.dfpwm",
   "new-wild-thornberrys-donnie.dfpwm",
   "new-yeah-boiii-i-i-i.dfpwm",
+  "startup.lua",
 }
 
 -- Base URL of your repo
@@ -60,19 +61,21 @@ else
   if not speaker then
     error("No speaker peripheral found!")
   end
+  while true do
+    -- Pick a random file
+    local choice = files[math.random(#files)]
+    print("Playing " .. choice)
 
-  -- Pick a random file
-  local choice = files[math.random(#files)]
-  print("Playing " .. choice)
-
-  -- Open file and stream to speaker
-  local decoder = require("cc.audio.dfpwm").make_decoder()
-  local f = assert(io.open(choice, "rb"))
-  for chunk in f:lines(16 * 1024) do
-    local buffer = decoder(chunk)
-    while not speaker.playAudio(buffer) do
-      os.pullEvent("speaker_audio_empty")
+    -- Open file and stream to speaker
+    local decoder = require("cc.audio.dfpwm").make_decoder()
+    local f = assert(io.open(choice, "rb"))
+    for chunk in f:lines(16 * 1024) do
+      local buffer = decoder(chunk)
+      while not speaker.playAudio(buffer) do
+        os.pullEvent("speaker_audio_empty")
+      end
     end
+    f:close()
+    os.sleep(60)
   end
-  f:close()
 end
