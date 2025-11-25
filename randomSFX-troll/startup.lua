@@ -44,7 +44,7 @@ local files = {
 }
 
 -- Base URL of your repo
-local baseURL = "https://raw.githubusercontent.com/40476/randomSFX-troll/main/"
+local baseURL = "https://raw.githubusercontent.com/40476/cctweaked-programs/main/randomSFX-troll/"
 
 if args[1] == "install" then
   print("Downloading sound files...")
