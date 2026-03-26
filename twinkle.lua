@@ -1,47 +1,61 @@
 -- Configuration
 local monitorName = "monitor_0"
-local starCount = 15 -- How many stars to show at once
+local maxStars = 40    -- Maximum stars on screen at once
+local twinkleSpeed = 0.1 -- Seconds between updates
 local mon = peripheral.wrap(monitorName)
 
 if not mon then
-    error("Monitor 'monitor_0' not found. Is it connected via modem and wrapped?")
+    error("Monitor '" .. monitorName .. "' not found. Check modem connection!")
 end
 
 mon.setTextScale(0.5)
 local width, height = mon.getSize()
+local stars = {} -- This table will track {x, y, char}
 
--- Function to draw a single star at a random position
-local function drawStar(x, y, color)
-    mon.setCursorPos(x, y)
-    mon.setTextColor(color)
-    -- Randomly pick a star shape for variety
-    local shapes = {"*", "+", "."}
-    mon.write(shapes[math.random(1, #shapes)])
-end
-
+-- Clear the screen initially
 mon.setBackgroundColor(colors.black)
 mon.clear()
 
-while true do
-    -- Pick a random spot
-    local x = math.random(1, width)
-    local y = math.random(1, height)
+-- Function to add a new star to the tracker
+local function addStar()
+    local newStar = {
+        x = math.random(1, width),
+        y = math.random(1, height),
+        char = ({"*", ".", "+"})[math.random(1, 3)],
+        color = (math.random() > 0.3) and colors.white or colors.yellow
+    }
+    table.insert(stars, newStar)
     
-    -- "Birth" a star (Bright White or Yellow)
-    local starColor = math.random() > 0.5 and colors.white or colors.yellow
-    drawStar(x, y, starColor)
-    
-    -- Short delay for the "twinkle" speed
-    sleep(0.1)
-    
-    -- "Fade" a random star by drawing a black space over a random area
-    -- This keeps the screen from filling up entirely
-    mon.setCursorPos(math.random(1, width), math.random(1, height))
-    mon.write(" ")
-    
-    -- Occasionally clear a small batch to keep it moving
-    if math.random(1, 20) == 1 then
-        mon.setCursorPos(math.random(1, width), math.random(1, height))
-        mon.write("  ")
+    -- Draw it
+    mon.setCursorPos(newStar.x, newStar.y)
+    mon.setTextColor(newStar.color)
+    mon.write(newStar.char)
+end
+
+-- Function to remove the oldest star
+local function removeOldestStar()
+    if #stars > 0 then
+        local oldStar = table.remove(stars, 1) -- Remove first item in table
+        mon.setCursorPos(oldStar.x, oldStar.y)
+        mon.write(" ") -- Overwrite with a space
     end
+end
+
+-- Main Animation Loop
+while true do
+    -- Add a star if we haven't hit the limit
+    if #stars < maxStars then
+        addStar()
+    end
+
+    -- Randomly decide to "blink" a star out
+    if #stars > 5 and math.random(1, 3) == 1 then
+        removeOldestStar()
+    end
+
+    -- Add a fresh star to replace the one we just blinked
+    addStar()
+
+    -- Small delay so it doesn't look like a strobe light
+    sleep(twinkleSpeed)
 end
