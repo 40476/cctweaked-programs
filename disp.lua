@@ -23,28 +23,28 @@ local imgW, imgH = #image[1], #image
 local w, h = term.getSize()
 
 -- Compute scale factors
-local scaleX = w / imgW
-local scaleY = h / imgH
-local scale = math.min(scaleX, scaleY)
+local scaleX = imgW / w
+local scaleY = imgH / h
 
 -- Clear screen
 term.clear()
 
--- Draw scaled image
-for y = 1, imgH do
-  for x = 1, imgW do
-    local color = image[y][x]
+-- Draw scaled image using nearest-neighbor sampling
+for dy = 1, h do
+  for dx = 1, w do
+    -- Map monitor pixel back to image coordinates
+    local srcX = math.floor(dx * scaleX)
+    local srcY = math.floor(dy * scaleY)
+
+    -- Clamp to image bounds
+    if srcX < 1 then srcX = 1 end
+    if srcY < 1 then srcY = 1 end
+    if srcX > imgW then srcX = imgW end
+    if srcY > imgH then srcY = imgH end
+
+    local color = image[srcY][srcX]
     if color then
-      -- Draw a block of pixels scaled to monitor size
-      local startX = math.floor((x-1) * scale) + 1
-      local startY = math.floor((y-1) * scale) + 1
-      local endX   = math.floor(x * scale)
-      local endY   = math.floor(y * scale)
-      for dy = startY, endY do
-        for dx = startX, endX do
-          paintutils.drawPixel(dx, dy, color)
-        end
-      end
+      paintutils.drawPixel(dx, dy, color)
     end
   end
 end
