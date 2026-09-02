@@ -1,33 +1,40 @@
 -- client.lua
--- Receives DFPWM broadcast over modem and decodes it to a speaker
+-- Feature-rich Radio Receiver with Tuning, Volume, and Anti-Starvation Heartbeats
 
 local dfpwm = require("cc.audio.dfpwm")
 local speaker = peripheral.find("speaker") or error("No speaker attached!")
 local modem = peripheral.find("modem", function(n, p) return p.isWireless() end) 
     or peripheral.find("modem") 
     or error("No modem attached!")
-    
+
+-- State Variables
 local CHANNEL = 101
 local METADATA_CHANNEL = CHANNEL + 1
 local SYNC_CHANNEL = CHANNEL + 2
+local PRIVATE_SYNC_CHANNEL = math.random(60000, 65000)
 
--- Pick a random, temporary private channel for this specific client to receive its sync data
-local PRIVATE_SYNC_CHANNEL = math.random(10000, 65000)
-
-modem.open(CHANNEL)
-modem.open(METADATA_CHANNEL)
-modem.open(PRIVATE_SYNC_CHANNEL)
-local decoder = dfpwm.make_decoder()
-
--- UI State Variables
+local volume = 1.0
 local audioQueue = {}
 local isBuffering = true
 local currentStation = "Unknown Station"
 local currentTitle = "Waiting for broadcast..."
-local currentArtist = ""
-local clientStatus = ""
+local clientStatus = "Requesting sync..."
+local last_heartbeat = os.clock()
 
--- === UI FUNCTIONS === --
+local decoder = dfpwm.make_decoder()
+local supports_volume = true -- Flag to track if the speaker accepts volume args
+
+local function tuneModems()
+    modem.closeAll()
+    METADATA_CHANNEL = CHANNEL + 1
+    SYNC_CHANNEL = CHANNEL + 2
+    modem.open(CHANNEL)
+    modem.open(METADATA_CHANNEL)
+    modem.open(PRIVATE_SYNC_CHANNEL)
+end
+tuneModems()
+
+-- === UI & EVENT HANDLING === --
 local function drawUI()
     term.setBackgroundColor(colors.black)
     term.clear()
@@ -37,40 +44,32 @@ local function drawUI()
     term.setTextColor(colors.white)
     term.clearLine()
     term.setCursorPos(2, 1)
-    term.write("Radio Receiver - CH: " .. CHANNEL)
+    term.write("Radio Receiver")
     
     term.setBackgroundColor(colors.black)
     term.setCursorPos(2, 3)
     term.setTextColor(colors.cyan)
-    term.write("Station:")
-    term.setCursorPos(2, 4)
+    term.write("Station: ")
     term.setTextColor(colors.white)
     term.write(currentStation)
 
-    term.setCursorPos(2, 6)
+    term.setCursorPos(2, 5)
     term.setTextColor(colors.yellow)
     term.write("Now Playing:")
-    
-    term.setCursorPos(2, 7)
+    term.setCursorPos(2, 6)
     term.setTextColor(colors.white)
     term.write(currentTitle)
     
-    if currentArtist ~= "" then
-        term.setCursorPos(2, 8)
-        term.setTextColor(colors.lightGray)
-        term.write(currentArtist)
-    end
-    
+    term.setCursorPos(2, 9)
+    term.setTextColor(colors.green)
+    term.write("Volume: [ - ] " .. math.floor(volume * 100) .. "% [ + ]")
     term.setCursorPos(2, 11)
+    term.write("Tuning: [ < ] CH: " .. CHANNEL .. " [ > ]")
+    
+    term.setCursorPos(2, 14)
     term.setTextColor(colors.cyan)
     term.write("Status: ")
-    
-    -- Color code the status for errors!
-    if clientStatus:match("Lost Signal") then
-        term.setTextColor(colors.red)
-    else
-        term.setTextColor(colors.white)
-    end
+    if clientStatus:match("Lost Signal") then term.setTextColor(colors.red) else term.setTextColor(colors.white) end
     term.write(clientStatus)
 end
 
@@ -80,101 +79,144 @@ local function setStatus(msg)
         drawUI()
     end
 end
--- ==================== --
 
-setStatus("Requesting sync from station...")
+local function changeChannel(diff)
+    CHANNEL = math.max(1, CHANNEL + diff)
+    tuneModems()
+    currentStation = "Unknown Station"
+    currentTitle = "Waiting for broadcast..."
+    audioQueue = {}
+    isBuffering = true
+    setStatus("Tuned to " .. CHANNEL .. ". Syncing...")
+    modem.transmit(SYNC_CHANNEL, PRIVATE_SYNC_CHANNEL, "SYNC_REQUEST")
+end
 
--- Send the initial sync request!
+local function changeVolume(diff)
+    volume = math.max(0.0, math.min(3.0, volume + diff))
+    drawUI()
+end
+
+local function handleUIEvents()
+    while true do
+        local e, p1, p2, p3 = os.pullEvent()
+        if e == "mouse_click" then
+            if p3 == 9 then
+                if p2 >= 9 and p2 <= 13 then changeVolume(-0.1)
+                elseif p2 >= 22 and p2 <= 26 then changeVolume(0.1) end
+            elseif p3 == 11 then
+                if p2 >= 9 and p2 <= 13 then changeChannel(-1)
+                elseif p2 >= 22 and p2 <= 26 then changeChannel(1) end
+            end
+        elseif e == "key" then
+            if p1 == keys.up then changeVolume(0.1)
+            elseif p1 == keys.down then changeVolume(-0.1)
+            elseif p1 == keys.left then changeChannel(-1)
+            elseif p1 == keys.right then changeChannel(1) end
+        end
+    end
+end
+
+-- === AUDIO RECEIVER LOGIC === --
 modem.transmit(SYNC_CHANNEL, PRIVATE_SYNC_CHANNEL, "SYNC_REQUEST")
 
--- Task 1: Only listens to the modem and handles incoming data
 local function receiveLoop()
     while true do
         local event, side, channel, replyChannel, message = os.pullEvent("modem_message")
         
-        -- Accept audio from the LIVE channel OR our PRIVATE catch-up channel
         if (channel == CHANNEL or channel == PRIVATE_SYNC_CHANNEL) and type(message) == "string" then
-            
-            -- If it's a metadata packet masquerading as a string (from sync)
             if message:match("^{") then
-                local ok, data = pcall(textutils.unserialiseJSON, message)
-                if ok and type(data) == "table" then
+                local ok, data = pcall(textutils.unserializeJSON, message)
+                -- Safety check: verify data is actually a table before indexing
+                if ok and type(data) == "table" and data.type == "song" then
                     currentStation = data.station or "Unknown Station"
                     currentTitle = data.title or "Unknown"
-                    currentArtist = data.artist or ""
                     drawUI()
                 end
             else
-                -- Otherwise, it's audio! Slice it up.
                 local chunkSize = 4 * 1024
                 for i = 1, #message, chunkSize do
-                    local slice = message:sub(i, i + chunkSize - 1)
-                    local buffer = decoder(slice)
-                    table.insert(audioQueue, buffer)
+                    table.insert(audioQueue, decoder(message:sub(i, i + chunkSize - 1)))
                 end
                 os.queueEvent("new_audio")
             end
             
         elseif channel == METADATA_CHANNEL and type(message) == "string" then
-            -- Decode live metadata
-            local ok, data = pcall(textutils.unserialiseJSON, message)
+            local ok, data = pcall(textutils.unserializeJSON, message)
+            -- Safety check: verify data is actually a table before indexing
             if ok and type(data) == "table" then
-                currentStation = data.station or "Unknown Station"
-                currentTitle = data.title or "Unknown"
-                currentArtist = data.artist or ""
-                
-                decoder = dfpwm.make_decoder()
-                audioQueue = {}
-                isBuffering = true
-                setStatus("Buffering...")
+                if data.type == "heartbeat" then
+                    last_heartbeat = os.clock() -- Reset starvation timer!
+                elseif data.type == "control" then
+                    setStatus("Control Command: " .. tostring(data.command))
+                elseif data.type == "song" then
+                    currentStation = data.station or "Unknown Station"
+                    currentTitle = data.title or "Unknown"
+                    decoder = dfpwm.make_decoder()
+                    audioQueue = {}
+                    isBuffering = true
+                    setStatus("Buffering...")
+                end
             end
         end
     end
 end
 
--- Task 2: Only handles pushing audio to the speaker
 local function playLoop()
     while true do
         if isBuffering and #audioQueue < 4 then
-            
-            local timeout = os.startTimer(0.5)
-            
+            local timeout = os.startTimer(1.0)
             while isBuffering and #audioQueue < 4 do
                 local event_data = {os.pullEvent()}
-                
                 if event_data[1] == "timer" and event_data[2] == timeout then
-                    if #audioQueue > 0 then
-                        -- We got at least SOME audio, force play it so it doesn't stay silent
-                        isBuffering = false
+                    -- Check if we are kept alive by a heartbeat packet (1.5 seconds)
+                    if os.clock() > last_heartbeat + 1.5 then
+                        if #audioQueue > 0 then
+                            isBuffering = false
+                        else
+                            speaker.playNote("bell", 1, 12)
+                            setStatus("Lost Signal! Syncing...")
+                            modem.transmit(SYNC_CHANNEL, PRIVATE_SYNC_CHANNEL, "SYNC_REQUEST")
+                            timeout = os.startTimer(1.0)
+                        end
                     else
-                        -- Oh no, we are completely starved of audio mid-stream!
-                        -- Beep the speaker, show an error, and request a sync packet!
-                        speaker.playNote("bell", 1, 12)
-                        setStatus("Lost Signal! Syncing...")
-                        modem.transmit(SYNC_CHANNEL, PRIVATE_SYNC_CHANNEL, "SYNC_REQUEST")
-                        
-                        -- Reset the timeout timer so it beeps again if it fails
-                        timeout = os.startTimer(0.5)
+                        timeout = os.startTimer(1.0) -- Heartbeat saved us, keep waiting safely
                     end
-                elseif event_data[1] == "new_audio" then
-                    if #audioQueue >= 4 then
-                        isBuffering = false
-                        break
-                    end
+                elseif event_data[1] == "new_audio" and #audioQueue >= 4 then
+                    isBuffering = false
+                    break
                 end
             end
-            
         elseif #audioQueue > 0 then
             setStatus("Playing")
             isBuffering = false
             local buffer = table.remove(audioQueue, 1)
+            local success = false
             
-            while not speaker.playAudio(buffer) do
-                os.pullEvent("speaker_audio_empty")
+            -- Attempt to play with volume. Safely catch errors if volume isn't supported.
+            if supports_volume then
+                local ok, res = pcall(speaker.playAudio, buffer, volume)
+                if ok then
+                    success = res
+                else
+                    -- It errored! This version of CC doesn't support the volume argument.
+                    supports_volume = false
+                    success = speaker.playAudio(buffer)
+                end
+            else
+                -- We already know it doesn't support volume, skip the pcall.
+                success = speaker.playAudio(buffer)
             end
             
+            -- If it failed to queue (speaker is full), wait until it empties and try again
+            while not success do
+                os.pullEvent("speaker_audio_empty")
+                if supports_volume then
+                    success = speaker.playAudio(buffer, volume)
+                else
+                    success = speaker.playAudio(buffer)
+                end
+            end
         else
-            -- We ran out of audio! Switch back to buffering mode and instantly trigger a sync.
             isBuffering = true
             setStatus("Lost Signal! Syncing...")
             speaker.playNote("bell", 1, 12)
@@ -183,4 +225,5 @@ local function playLoop()
     end
 end
 
-parallel.waitForAny(receiveLoop, playLoop)
+drawUI()
+parallel.waitForAny(handleUIEvents, receiveLoop, playLoop)
